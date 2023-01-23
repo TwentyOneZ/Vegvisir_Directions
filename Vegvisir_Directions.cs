@@ -11,7 +11,7 @@ namespace VegvisirDirections;
 public class VegvisirDirections : BaseUnityPlugin
 {
 	public const string ModName = "Vegvisir Directions";
-	public const string ModVersion = "1.0.2";
+	public const string ModVersion = "1.0.3";
 	public const string ModGUID = "twentyOneZ.VegvisirDirections";
 
 	public static readonly ConfigSync configSync = new(ModName) { DisplayName = ModName, CurrentVersion = ModVersion, MinimumRequiredVersion = ModVersion };
@@ -23,6 +23,9 @@ public class VegvisirDirections : BaseUnityPlugin
 	public static ConfigEntry<float> turningDelay;
 	public static ConfigEntry<Toggle> syncLocalization;
 	public static ConfigEntry<Toggle> restrictMapToCartographyTable;
+	public static ConfigEntry<string> mapAccessWhenStatusEffectIsUp;
+	public static ConfigEntry<string> mapAcessWhenStatusEffectIsUpAfterCartographyTable;
+	public static ConfigEntry<string> firstAcessToCartographyTable_String;
 	public static ConfigEntry<string> N_string;
 	public static ConfigEntry<string> NE_string;
 	public static ConfigEntry<string> E_string;
@@ -62,23 +65,32 @@ public class VegvisirDirections : BaseUnityPlugin
 		syncLocalization = config<Toggle>("1 - Server Sync Configurations", "Sychronize Localization", Toggle.On,
 			new ConfigDescription("Should Localization config be synchronized with the server (on) or leave it to clients (off)"), true);
 
-		showPreciseDirection = config<Toggle>("1 - Server Sync Configurations", "Show precise direction", Toggle.Off, 
+		showPreciseDirection = config<Toggle>("1 - Server Sync Configurations", "Show precise direction", Toggle.Off,
 			"Reveals the precise angle in the compass", true);
 
-		pinLocationOnMap = config<Toggle>("1 - Server Sync Configurations", "Mark altar location", Toggle.On, 
+		pinLocationOnMap = config<Toggle>("1 - Server Sync Configurations", "Mark altar location", Toggle.On,
 			"Marks the altar location on the map anyways", true);
 
-		stareAtMarkedDirection = config<Toggle>("1 - Server Sync Configurations", "Stare at marked direction", Toggle.On, 
+		stareAtMarkedDirection = config<Toggle>("1 - Server Sync Configurations", "Stare at marked direction", Toggle.On,
 			"Change the player camera direction to the marked direction", true);
 
-		stareAtNorth = config<Toggle>("1 - Server Sync Configurations", "Stare at north", Toggle.Off, 
+		stareAtNorth = config<Toggle>("1 - Server Sync Configurations", "Stare at north", Toggle.Off,
 			"Change the player camera direction to the North (disabled if 'Stare at marked direction' is On)", true);
 
 		restrictMapToCartographyTable = config<Toggle>("1 - Server Sync Configurations", "Map Restriction", Toggle.Off,
 			"Restricts opening the world map to interacting with the cartography table. Also disables the minimap.", true);
 
-		turningDelay = config<float>("1 - Server Sync Configurations", "Turning Delay", 1.5f, 
+		mapAccessWhenStatusEffectIsUp = config<string>("1 - Server Sync Configurations", "Map enabled with this effect", "Wishbone",
+			new ConfigDescription("Makes map acessible when the character have this status effect. Leave it blank to disable. Disabled if Map Restriction is Off. \nDefault value makes map acessible when a wishbone is equipped.\nPossible values are the names of the status effects, such as Resting, Rested, Wishbone, Fire, etc."), true);
+
+		mapAcessWhenStatusEffectIsUpAfterCartographyTable = config<string>("1 - Server Sync Configurations", "Map enabled with this effect after visiting a cartography table", "Resting",
+			new ConfigDescription("Makes map acessible when the character have this status effect, but only after acessing a cartography table for the first time. Leave it blank to disable. Disabled if Map Restriction is Off. \nDefault value makes map acessible whenever the character is Rested, but only after using a cartography table for the first time.\nPossible values are the names of the status effects, such as Resting, Rested, Wishbone, Fire, etc."), true);
+
+		turningDelay = config<float>("1 - Server Sync Configurations", "Turning Delay", 1.5f,
 			new ConfigDescription("Time in seconds it takes to turn the camera angle to the marked direction", new AcceptableValueRange<float>(1f, 3f)), true);
+
+		firstAcessToCartographyTable_String = config<string>("2 - Localization", "firstAcessToCartographyTable_String", "You take one of maps on the table with you.",
+			new ConfigDescription("String to describe North direction"), VegvisirDirections.syncLocalization.Value == Toggle.On);
 
 		N_string = config<string>("2 - Localization", "N_string", "As you touch the vegvisir, you can't shake off the feeling that danger lurks just beyond the north.",
 			new ConfigDescription("String to describe North direction"), VegvisirDirections.syncLocalization.Value == Toggle.On);
@@ -228,7 +240,7 @@ public class VegvisirDirections : BaseUnityPlugin
 	{
 		static void Postfix(Minimap __instance, Minimap.MapMode ___m_mode)
 		{
-			if (!(VegvisirDirections.restrictMapToCartographyTable.Value == Toggle.On) || Player.m_localPlayer == null)
+			if (Player.m_localPlayer == null || !(VegvisirDirections.restrictMapToCartographyTable.Value == Toggle.On) || IsPlayerMapAllowed())
 				return;
 			__instance.m_smallRoot.SetActive(false);
 			if (ZInput.GetButtonDown("Map") || ZInput.GetButtonDown("JoyMap") || ZInput.GetButtonDown("JoyMap"))
@@ -240,9 +252,15 @@ public class VegvisirDirections : BaseUnityPlugin
 	{
 		static void Postfix(MapTable __instance, ItemDrop.ItemData item)
 		{
-			if (!(VegvisirDirections.restrictMapToCartographyTable.Value == Toggle.On) || Player.m_localPlayer == null || item != null)
+			if (Player.m_localPlayer == null || item != null || !(VegvisirDirections.restrictMapToCartographyTable.Value == Toggle.On) || IsPlayerMapAllowed())
 				return;
 			Minimap.instance.SetMapMode(Minimap.MapMode.Large);
+			if (!VegvisirDirections.mapAcessWhenStatusEffectIsUpAfterCartographyTable.Value.Length.Equals(0) && !Player.m_localPlayer.HaveUniqueKey("mapAcquired"))
+			{
+				Player.m_localPlayer.AddUniqueKey("mapAcquired");
+				Player.m_localPlayer.Message(MessageHud.MessageType.Center, VegvisirDirections.firstAcessToCartographyTable_String.Value);
+			}
+			return;
 		}
 	}
 	[HarmonyPatch(typeof(Minimap), nameof(Minimap.ShowPointOnMap))]
@@ -250,12 +268,24 @@ public class VegvisirDirections : BaseUnityPlugin
 	{
 		static bool Prefix()
 		{
-			if (VegvisirDirections.restrictMapToCartographyTable.Value == Toggle.On) { 
+			if (Player.m_localPlayer != null && VegvisirDirections.restrictMapToCartographyTable.Value == Toggle.On || !IsPlayerMapAllowed()) {
 				return false;
-			} else
-            {
-				return true;
 			}
+			return true;
 		}
 	}
+
+	public static bool IsPlayerMapAllowed()
+	{
+		if (!VegvisirDirections.mapAccessWhenStatusEffectIsUp.Value.Length.Equals(0) && Player.m_localPlayer.GetSEMan().HaveStatusEffect(VegvisirDirections.mapAccessWhenStatusEffectIsUp.Value))
+		{
+			return true;
+		}
+		if (!VegvisirDirections.mapAcessWhenStatusEffectIsUpAfterCartographyTable.Value.Length.Equals(0) && Player.m_localPlayer.GetSEMan().HaveStatusEffect(VegvisirDirections.mapAcessWhenStatusEffectIsUpAfterCartographyTable.Value) && Player.m_localPlayer.HaveUniqueKey("mapAcquired"))
+		{
+			return true;
+		}
+		return false;
+	}
+
 }
