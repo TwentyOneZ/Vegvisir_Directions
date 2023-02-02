@@ -4,14 +4,18 @@ using HarmonyLib;
 using ServerSync;
 using UnityEngine;
 using System.Reflection;
+using System.Collections.Generic;
+//using Wayshrine;
 
 namespace VegvisirDirections;
 
 [BepInPlugin(ModGUID, ModName, ModVersion)]
+[BepInDependency("TargetPortal", BepInDependency.DependencyFlags.SoftDependency)]
+//[BepInDependency("AzuWayshrine", BepInDependency.DependencyFlags.SoftDependency)]
 public class VegvisirDirections : BaseUnityPlugin
 {
 	public const string ModName = "Vegvisir Directions";
-	public const string ModVersion = "1.0.3";
+	public const string ModVersion = "1.0.4";
 	public const string ModGUID = "twentyOneZ.VegvisirDirections";
 
 	public static readonly ConfigSync configSync = new(ModName) { DisplayName = ModName, CurrentVersion = ModVersion, MinimumRequiredVersion = ModVersion };
@@ -23,6 +27,8 @@ public class VegvisirDirections : BaseUnityPlugin
 	public static ConfigEntry<float> turningDelay;
 	public static ConfigEntry<Toggle> syncLocalization;
 	public static ConfigEntry<Toggle> restrictMapToCartographyTable;
+	//public static ConfigEntry<Toggle> wayshrinesCompatibility;
+	public static ConfigEntry<Toggle> targetPortalCompatibility;
 	public static ConfigEntry<string> mapAccessWhenStatusEffectIsUp;
 	public static ConfigEntry<string> mapAcessWhenStatusEffectIsUpAfterCartographyTable;
 	public static ConfigEntry<string> firstAcessToCartographyTable_String;
@@ -88,6 +94,12 @@ public class VegvisirDirections : BaseUnityPlugin
 
 		turningDelay = config<float>("1 - Server Sync Configurations", "Turning Delay", 1.5f,
 			new ConfigDescription("Time in seconds it takes to turn the camera angle to the marked direction", new AcceptableValueRange<float>(1f, 3f)), true);
+
+		//wayshrinesCompatibility = config<Toggle>("1 - Server Sync Configurations", "Wayshrines mod Compatibility", Toggle.Off,
+		//	"Makes mod compatible with Wayshrines mod. Opens the map whenever you get near a wayshrine.", true);
+
+		targetPortalCompatibility = config<Toggle>("1 - Server Sync Configurations", "TargetPortal mod Compatibility", Toggle.Off,
+			"Makes mod compatible with Wayshrines mod. Opens the map whenever you enter a portal.", true);
 
 		firstAcessToCartographyTable_String = config<string>("2 - Localization", "firstAcessToCartographyTable_String", "You take one of maps on the table with you.",
 			new ConfigDescription("String to describe North direction"), VegvisirDirections.syncLocalization.Value == Toggle.On);
@@ -244,7 +256,9 @@ public class VegvisirDirections : BaseUnityPlugin
 				return;
 			__instance.m_smallRoot.SetActive(false);
 			if (ZInput.GetButtonDown("Map") || ZInput.GetButtonDown("JoyMap") || ZInput.GetButtonDown("JoyMap"))
+			{
 				__instance.SetMapMode(Minimap.MapMode.None);
+			} 
 		}
 	}
 	[HarmonyPatch(typeof(MapTable), "OnRead")]
@@ -275,8 +289,90 @@ public class VegvisirDirections : BaseUnityPlugin
 		}
 	}
 
+	//[HarmonyPatch(typeof(WayshrineCustomBehaviour), nameof(WayshrineCustomBehaviour.Interact))]
+	//static class WayshrineInteractPatch
+	//{
+	//	static bool Prefix()
+	//	{
+	//		if (isAwayFromWayshrine)
+    //       {
+	//			Player.m_localPlayer.Message(MessageHud.MessageType.Center, "Come closer to the wayshrine");
+	//			return false;
+    //        } else
+    //        {
+	//			isAwayFromWayshrine = false;
+	//			Minimap.instance.SetMapMode(Minimap.MapMode.Large);
+	//			return true;
+	//		}
+	//	}
+	//}
+
+	public static bool isAwayFromPortal = true;
+	//public static bool isAwayFromWayshrine = true;
 	public static bool IsPlayerMapAllowed()
 	{
+	//	if ((VegvisirDirections.wayshrinesCompatibility.Value == Toggle.On)) 
+	//	{ 
+	//		List<Piece> m_tempPieces = new List<Piece>();
+	//		m_tempPieces.Clear();
+	//		Piece.GetAllPiecesInRadius(Player.m_localPlayer.transform.position, 2.0f, m_tempPieces);
+	//		if (m_tempPieces != null)
+	//		{
+	//			foreach (Piece onePiece in m_tempPieces)
+	//			{
+	//				if (onePiece.gameObject != null && (onePiece.gameObject.name.ToLower().Contains("wayshrine")))
+	//				{
+	//					if (isAwayFromWayshrine)
+	//					{
+	//						GameObject hoverObject = onePiece.gameObject;
+	//						if (!(hoverObject == null))
+	//						{
+	//							Interactable componentInParent = hoverObject.GetComponentInParent<Interactable>();
+	//							Debug.Log($"Component: {componentInParent}, HoverName:{hoverObject.name}");
+	//							if (componentInParent is Wayshrine.WayshrineCustomBehaviour)
+	//							{
+	//								isAwayFromWayshrine = false;
+	//								componentInParent.Interact(Player.m_localPlayer, false, false);
+	//								return true;
+	//							}
+	//						}
+	//					}
+	//					return true;
+	//				}
+	//			}
+	//		}
+	//		if (!isAwayFromWayshrine)
+	//		{
+	//			Minimap.instance.SetMapMode(Minimap.MapMode.None);
+	//			isAwayFromWayshrine = true;
+	//		}
+	//	}
+		if ((VegvisirDirections.targetPortalCompatibility.Value == Toggle.On))
+		{
+			List<Piece> m_tempPieces = new List<Piece>();
+			m_tempPieces.Clear();
+			Piece.GetAllPiecesInRadius(Player.m_localPlayer.transform.position, 1f, m_tempPieces);
+			if (m_tempPieces != null)
+			{
+				foreach (Piece onePiece in m_tempPieces)
+				{
+					if (onePiece.gameObject != null && (onePiece.gameObject.name.ToLower().Contains("portal")))
+					{
+						if (isAwayFromPortal)
+						{
+							isAwayFromPortal = false;
+							Minimap.instance.SetMapMode(Minimap.MapMode.Large);
+						}
+						return true;
+					} 
+				}
+			}
+			if (!isAwayFromPortal)
+			{
+				Minimap.instance.SetMapMode(Minimap.MapMode.None);
+				isAwayFromPortal = true;
+			}
+		}
 		if (!VegvisirDirections.mapAccessWhenStatusEffectIsUp.Value.Length.Equals(0) && Player.m_localPlayer.GetSEMan().HaveStatusEffect(VegvisirDirections.mapAccessWhenStatusEffectIsUp.Value))
 		{
 			return true;
