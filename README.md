@@ -25,6 +25,11 @@ Inspired by <a href="https://valheim.thunderstore.io/package/Noctambulant_Blade/
 <li>Run the game via the mod manager, selecting it, choosing a profile and clicking on "start modded".</li>
 </ol>
 
+<h2>Known conflicts:</h2>
+To resolve the issue of Wishbone status not working on map restrictions when also using EpicLoot mod, set the following option in the twentyOneZ.VegvisirDirections.cfg file:
+`Map enabled with this effect = CustomWishboneFinder`
+Thanks to [melchitherabbit](https://github.com/melchitherabbit) for this one!
+
 <h3>Changelog 1.0.2</h3>
 <ul>
 <li>Implemented ServerSync (thanks <a href="https://github.com/blaxxun-boop/ServerSync">blaxxun-boop</a>).</li>
